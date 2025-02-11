@@ -17,6 +17,7 @@ find_package(std_srvs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
@@ -28,7 +29,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   std_srvs
   std_msgs
   tf2
-  tf2_geometry_msgs)
+  tf2_geometry_msgs
+  geometry_msgs)
 
 # Build
 add_library(${PROJECT_NAME}_node SHARED
