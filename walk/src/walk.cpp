@@ -1,27 +1,3 @@
-// This file is based on UNSW Sydney's codebase, but has been modified significantly.
-// Both copyright notices are provided below.
-//
-// Copyright (c) 2018 UNSW Sydney.  All rights reserved.
-//
-// Licensed under Team rUNSWift's original license. See the "LICENSE-runswift"
-// file to obtain a copy of the license.
-//
-// ---------------------------------------------------------------------------------
-//
-// Copyright 2021 Kenji Brameld
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include <memory>
 #include <utility>
 
@@ -36,12 +12,14 @@
 #include "sole_pose.hpp"
 #include "feet_trajectory.hpp"
 #include "params.hpp"
+#include "std_msgs/msg/bool.hpp"
+
 
 namespace walk
 {
 
 Walk::Walk(const rclcpp::NodeOptions & options)
-: Node("Walk", options)
+: Node("Walk", options), walking_enabled_(false)  // Inicialmente el robot no camina
 {
   params_ = std::make_unique<Params>(*this);
 
@@ -58,6 +36,10 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   sub_imu_ = create_subscription<sensor_msgs::msg::Imu>(
     "imu", 10, std::bind(&Walk::imuCallback, this, std::placeholders::_1));
 
+  // 🔹 Nuevo suscriptor para habilitar o deshabilitar la caminata
+  sub_walk_control_ = create_subscription<std_msgs::msg::Bool>(
+    "/walk_control", 10, std::bind(&Walk::walkControlCallback, this, std::placeholders::_1));
+
   pub_sole_poses_ = create_publisher<biped_interfaces::msg::SolePoses>("motion/sole_poses", 1);
   pub_current_twist_ = create_publisher<geometry_msgs::msg::Twist>("walk/current_twist", 1);
   pub_ready_to_step_ = create_publisher<std_msgs::msg::Bool>("walk/ready_to_step", 1);
@@ -68,8 +50,24 @@ Walk::Walk(const rclcpp::NodeOptions & options)
 
 Walk::~Walk() {}
 
+void Walk::walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  walking_enabled_ = msg->data;  // Activa o desactiva la caminata según el mensaje recibido
+
+  if (walking_enabled_) {
+    RCLCPP_INFO(get_logger(), "🟢 Walk activado.");
+  } else {
+    RCLCPP_INFO(get_logger(), "🔴 Walk desactivado.");
+  }
+}
+
 void Walk::generateCommand()
 {
+  if (!walking_enabled_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, no se generan comandos.");
+    return;
+  }
+
   RCLCPP_DEBUG(get_logger(), "generateCommand()");
 
   if (!step_) {
@@ -94,8 +92,13 @@ void Walk::generateCommand()
 
 void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 {
+  if (!walking_enabled_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, ignorando comandos de movimiento.");
+    return;
+  }
+
   RCLCPP_DEBUG(
-    get_logger(), "walk() called with commanded_twist:  %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+    get_logger(), "walk() llamado con commanded_twist:  %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
     commanded_twist.linear.x, commanded_twist.linear.y, commanded_twist.linear.z,
     commanded_twist.angular.x, commanded_twist.angular.y, commanded_twist.angular.z);
 
@@ -104,7 +107,12 @@ void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 
 void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
 {
-  RCLCPP_DEBUG(get_logger(), "notifyPhase called");
+  if (!walking_enabled_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, ignorando cambios de fase.");
+    return;
+  }
+
+  RCLCPP_DEBUG(get_logger(), "notifyPhase llamado");
 
   if (phase.phase == phase_.phase) {
     RCLCPP_DEBUG(get_logger(), "Notified of a phase, but no change has taken place. Ignoring.");

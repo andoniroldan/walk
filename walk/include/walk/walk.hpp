@@ -55,6 +55,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_target_;
   rclcpp::Subscription<biped_interfaces::msg::Phase>::SharedPtr sub_phase_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_walk_control_;
 
   // Publishers
   rclcpp::Publisher<biped_interfaces::msg::SolePoses>::SharedPtr pub_sole_poses_;
@@ -71,7 +72,7 @@ private:
   void generateCommand();
   void phaseCallback(const biped_interfaces::msg::Phase::SharedPtr msg);
   void targetCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
-
+  void walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg);
   // Parameters
   std::unique_ptr<Params> params_;
 
@@ -84,6 +85,8 @@ private:
   geometry_msgs::msg::Twist target_twist_;
   std::unique_ptr<walk_interfaces::msg::Step> step_;
   std::unique_ptr<StepState> step_state_;
+
+  bool walking_enabled_;
 };
 
 }  // namespace walk
