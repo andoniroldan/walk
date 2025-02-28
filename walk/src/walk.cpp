@@ -19,7 +19,7 @@ namespace walk
 {
 
 Walk::Walk(const rclcpp::NodeOptions & options)
-: Node("Walk", options), walking_enabled_(false)  // Inicialmente el robot no camina
+: Node("Walk", options), walking_enabled_(false)  // Initialy, the walking is disabled
 {
   params_ = std::make_unique<Params>(*this);
 
@@ -36,7 +36,7 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   sub_imu_ = create_subscription<sensor_msgs::msg::Imu>(
     "imu", 10, std::bind(&Walk::imuCallback, this, std::placeholders::_1));
 
-  // 🔹 Nuevo suscriptor para habilitar o deshabilitar la caminata
+  // New subscriber to enable or disable walking
   sub_walk_control_ = create_subscription<std_msgs::msg::Bool>(
     "/walk_control", 10, std::bind(&Walk::walkControlCallback, this, std::placeholders::_1));
 
@@ -52,19 +52,19 @@ Walk::~Walk() {}
 
 void Walk::walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg)
 {
-  walking_enabled_ = msg->data;  // Activa o desactiva la caminata según el mensaje recibido
+  walking_enabled_ = msg->data;  // Activate or disable walking 
 
   if (walking_enabled_) {
-    RCLCPP_INFO(get_logger(), "🟢 Walk activado.");
+    RCLCPP_INFO(get_logger(), "🟢 Walk activated.");
   } else {
-    RCLCPP_INFO(get_logger(), "🔴 Walk desactivado.");
+    RCLCPP_INFO(get_logger(), "🔴 Walk disabled.");
   }
 }
 
 void Walk::generateCommand()
 {
   if (!walking_enabled_) {
-    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, no se generan comandos.");
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk desabled, stoping movement.");
     return;
   }
 
@@ -93,12 +93,12 @@ void Walk::generateCommand()
 void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 {
   if (!walking_enabled_) {
-    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, ignorando comandos de movimiento.");
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk disabled, ignoring movement commands.");
     return;
   }
 
   RCLCPP_DEBUG(
-    get_logger(), "walk() llamado con commanded_twist:  %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
+    get_logger(), "walk() called with commanded_twist:  %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
     commanded_twist.linear.x, commanded_twist.linear.y, commanded_twist.linear.z,
     commanded_twist.angular.x, commanded_twist.angular.y, commanded_twist.angular.z);
 
@@ -108,11 +108,11 @@ void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
 {
   if (!walking_enabled_) {
-    RCLCPP_DEBUG(get_logger(), "🚫 Walk deshabilitado, ignorando cambios de fase.");
+    RCLCPP_DEBUG(get_logger(), "🚫 Walk disabled, ignoring fase changes.");
     return;
   }
 
-  RCLCPP_DEBUG(get_logger(), "notifyPhase llamado");
+  RCLCPP_DEBUG(get_logger(), "notifyPhase called");
 
   if (phase.phase == phase_.phase) {
     RCLCPP_DEBUG(get_logger(), "Notified of a phase, but no change has taken place. Ignoring.");
