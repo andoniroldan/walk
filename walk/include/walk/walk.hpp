@@ -25,6 +25,7 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "walk_interfaces/action/crouch.hpp"
 #include "walk_interfaces/action/stand.hpp"
 #include "walk_interfaces/msg/feet_trajectory_point.hpp"
@@ -56,11 +57,13 @@ private:
   rclcpp::Subscription<biped_interfaces::msg::Phase>::SharedPtr sub_phase_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_walk_control_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_action_status_;
 
   // Publishers
   rclcpp::Publisher<biped_interfaces::msg::SolePoses>::SharedPtr pub_sole_poses_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_current_twist_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_ready_to_step_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_getup_action_;
 
   // Debug publishers
   rclcpp::Publisher<walk_interfaces::msg::Gait>::SharedPtr pub_gait_;
@@ -73,6 +76,10 @@ private:
   void phaseCallback(const biped_interfaces::msg::Phase::SharedPtr msg);
   void targetCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg);
+  void actionStatusCallback(const std_msgs::msg::String::SharedPtr msg);
+  void sendGetupCommand();
+  void restartWalk();
+
   // Parameters
   std::unique_ptr<Params> params_;
 
@@ -87,6 +94,17 @@ private:
   std::unique_ptr<StepState> step_state_;
 
   bool walking_enabled_;
+  bool security_fall_;
+  bool is_standing_;
+  bool swing_in_progress_;
+  bool walking_enabled_last_time_;
+  bool first_time_recovering_;
+
+  double accel_x;
+
+  rclcpp::Time start_moving_time_;
+  bool has_started_moving_;
+
 };
 
 }  // namespace walk
