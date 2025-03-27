@@ -43,6 +43,11 @@ Walk::Walk(const rclcpp::NodeOptions & options)
 
   sub_action_status_ = create_subscription<std_msgs::msg::String>(
     "/nao_pos_action/status", 10, std::bind(&Walk::actionStatusCallback, this, std::placeholders::_1));
+
+  sub_fsr_ = create_subscription<nao_lola_sensor_msgs::msg::FSR>(
+    "/sensors/fsr", 10, std::bind(&Walk::fsrCallback, this, std::placeholders::_1));
+  
+  
   
 
   pub_sole_poses_ = create_publisher<biped_interfaces::msg::SolePoses>("motion/sole_poses", 1);
@@ -63,6 +68,8 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   
   start_moving_time_ = this->get_clock()->now();
   has_started_moving_ = false;
+
+  fsr_emergency_stop_ = false;
 
   accel_x = 0.0;
 }
@@ -85,6 +92,11 @@ void Walk::walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg)
 
 void Walk::generateCommand()
 {
+  if (fsr_emergency_stop_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, stoping movement.");
+    return;
+  }
+
   if (security_fall_) {
     RCLCPP_DEBUG(get_logger(), "🚫 Security fall detected, stoping movement.");
     return;
@@ -119,6 +131,11 @@ void Walk::generateCommand()
 
 void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 {
+  if(fsr_emergency_stop_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, ignoring movement commands.");
+    return;
+  }
+
   if (!walking_enabled_) {
     RCLCPP_DEBUG(get_logger(), "🚫 Walk disabled, ignoring movement commands.");
     return;
@@ -157,6 +174,11 @@ void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 
 void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
 {
+  if (fsr_emergency_stop_) {
+    RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, ignoring fase changes.");
+    return;
+  }
+
   if (!walking_enabled_) {
     RCLCPP_DEBUG(get_logger(), "🚫 Walk disabled, ignoring fase changes.");
     return;
@@ -380,6 +402,30 @@ void Walk::restartWalk()
 
   RCLCPP_INFO(get_logger(), "✅ Walk node state has been reset.");
 }
+
+void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
+{
+  std::vector<double> values = {
+    msg->l_foot_front_left, msg->l_foot_front_right,
+    msg->l_foot_back_left, msg->l_foot_back_right,
+    msg->r_foot_front_left, msg->r_foot_front_right,
+    msg->r_foot_back_left, msg->r_foot_back_right
+  };
+
+  bool all_low = std::all_of(values.begin(), values.end(), [](double val) {
+    return val < 0.1;
+  });
+
+  if (all_low) {
+    RCLCPP_WARN(get_logger(), "🟥 Todos los sensores FSR por debajo del umbral");
+    fsr_emergency_stop_ = true;
+  } 
+  else if (!all_low) {
+    RCLCPP_INFO(get_logger(), "🟩 Presión detectada nuevamente");
+    fsr_emergency_stop_ = false;
+  }
+}
+
 
 
 

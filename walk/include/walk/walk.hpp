@@ -31,6 +31,7 @@
 #include "walk_interfaces/msg/feet_trajectory_point.hpp"
 #include "walk_interfaces/msg/gait.hpp"
 #include "walk_interfaces/msg/step.hpp"
+#include "nao_lola_sensor_msgs/msg/fsr.hpp"
 
 namespace walk {class Params;}
 class Step;
@@ -58,6 +59,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr sub_imu_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_walk_control_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_action_status_;
+  rclcpp::Subscription<nao_lola_sensor_msgs::msg::FSR>::SharedPtr sub_fsr_;
+
 
   // Publishers
   rclcpp::Publisher<biped_interfaces::msg::SolePoses>::SharedPtr pub_sole_poses_;
@@ -79,6 +82,7 @@ private:
   void actionStatusCallback(const std_msgs::msg::String::SharedPtr msg);
   void sendGetupCommand();
   void restartWalk();
+  void fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg);
 
   // Parameters
   std::unique_ptr<Params> params_;
@@ -99,6 +103,8 @@ private:
   bool swing_in_progress_;
   bool walking_enabled_last_time_;
   bool first_time_recovering_;
+
+  bool fsr_emergency_stop_;
 
   double accel_x;
 
