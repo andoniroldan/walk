@@ -70,6 +70,7 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   has_started_moving_ = false;
 
   fsr_emergency_stop_ = false;
+  last_fsr_emergency_stop_ = false;
 
   accel_x = 0.0;
 }
@@ -417,11 +418,17 @@ void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
   });
 
   if (all_low) {
-    RCLCPP_WARN(get_logger(), "🟥 Todos los sensores FSR por debajo del umbral");
+    if (!last_fsr_emergency_stop_) {
+      RCLCPP_WARN(get_logger(), "🟥 All FSR sensors below threshold") ;
+    }
+    last_fsr_emergency_stop_ = true;
     fsr_emergency_stop_ = true;
   } 
   else if (!all_low) {
-    RCLCPP_INFO(get_logger(), "🟩 Presión detectada nuevamente");
+    if (last_fsr_emergency_stop_) {
+      RCLCPP_INFO(get_logger(), "🟩 Pressure detected again");
+    }
+    last_fsr_emergency_stop_ = false;
     fsr_emergency_stop_ = false;
   }
 }

@@ -105,6 +105,7 @@ private:
   bool first_time_recovering_;
 
   bool fsr_emergency_stop_;
+  bool last_fsr_emergency_stop_;
 
   double accel_x;
 
