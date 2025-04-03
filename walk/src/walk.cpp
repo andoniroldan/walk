@@ -1,5 +1,7 @@
 #include <memory>
 #include <utility>
+#include "rclcpp/rclcpp.hpp"
+
 
 #include "walk/walk.hpp"
 #include "twist_limiter.hpp"
@@ -47,9 +49,6 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   sub_fsr_ = create_subscription<nao_lola_sensor_msgs::msg::FSR>(
     "/sensors/fsr", 10, std::bind(&Walk::fsrCallback, this, std::placeholders::_1));
   
-  
-  
-
   pub_sole_poses_ = create_publisher<biped_interfaces::msg::SolePoses>("motion/sole_poses", 1);
   pub_current_twist_ = create_publisher<geometry_msgs::msg::Twist>("walk/current_twist", 1);
   pub_ready_to_step_ = create_publisher<std_msgs::msg::Bool>("walk/ready_to_step", 1);
@@ -73,6 +72,16 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   last_fsr_emergency_stop_ = false;
 
   accel_x = 0.0;
+
+  delay_completed_ = false;
+
+  // Start a timer for the 20-second delay so the robot can start
+  delay_timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(20000), [this]() {
+      delay_completed_ = true;
+      RCLCPP_INFO(this->get_logger(), "20-second delay completed. Ready to start walk");
+      delay_timer_->cancel(); // Stop the delay timer after it completes
+    });
 }
 
 Walk::~Walk() {}
@@ -93,6 +102,11 @@ void Walk::walkControlCallback(const std_msgs::msg::Bool::SharedPtr msg)
 
 void Walk::generateCommand()
 {
+
+  if(!delay_completed_){
+    return;
+  }
+
   if (fsr_emergency_stop_) {
     RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, stoping movement.");
     return;
@@ -132,6 +146,10 @@ void Walk::generateCommand()
 
 void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 {
+  if(!delay_completed_){
+    return;
+  }
+
   if(fsr_emergency_stop_) {
     RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, ignoring movement commands.");
     return;
@@ -148,7 +166,7 @@ void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 
   geometry_msgs::msg::Twist adjusted_twist = commanded_twist;
 
-  if (has_started_moving_ && elapsed_time < 2.0) {
+  if (has_started_moving_ && elapsed_time < IGNORE_TWIST_VELOCITY_TIME) {
     // If the robot has started moving, but less than 2 seconds have passed,
     // ignore the twist messages and keep the robot still
     RCLCPP_INFO(get_logger(), "⏳ Less than 2 seconds have passed since the robot started moving. Ignoring twist messages.");
@@ -175,6 +193,10 @@ void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 
 void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
 {
+  if(!delay_completed_){
+    return;
+  }
+
   if (fsr_emergency_stop_) {
     RCLCPP_DEBUG(get_logger(), "🚫 FSR emergency stop detected, ignoring fase changes.");
     return;
@@ -228,6 +250,10 @@ void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
 
 void Walk::imuCallback(const sensor_msgs::msg::Imu & imu)
 {
+
+  if(!delay_completed_){
+    return;
+  }
   // Thresholds for detecting a fall
   const double FALL_Z_THRESHOLD = -5.0;       // Detects if the robot is lying down
   const double RECOVERY_Z_THRESHOLD = -9.0;  // Close to -9.8 when standing
@@ -335,6 +361,9 @@ void Walk::imuCallback(const sensor_msgs::msg::Imu & imu)
 
 void Walk::actionStatusCallback(const std_msgs::msg::String::SharedPtr msg)
 {
+  if(!delay_completed_){
+    return;
+  }
   RCLCPP_INFO(get_logger(), "Received action status: %s", msg->data.c_str());
 
   if (security_fall_) {
@@ -400,12 +429,17 @@ void Walk::restartWalk()
   step_.reset();
   step_state_.reset();
 
+  ftp_current_ = walk_interfaces::msg::FeetTrajectoryPoint();
 
   RCLCPP_INFO(get_logger(), "✅ Walk node state has been reset.");
 }
 
 void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
 {
+  if(!delay_completed_){
+    return;
+  }
+  
   std::vector<double> values = {
     msg->l_foot_front_left, msg->l_foot_front_right,
     msg->l_foot_back_left, msg->l_foot_back_right,
@@ -414,7 +448,7 @@ void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
   };
 
   bool all_low = std::all_of(values.begin(), values.end(), [](double val) {
-    return val < 0.1;
+    return val < 0.2;
   });
 
   if (all_low) {
@@ -432,9 +466,6 @@ void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
     fsr_emergency_stop_ = false;
   }
 }
-
-
-
 
 }  // namespace walk
 

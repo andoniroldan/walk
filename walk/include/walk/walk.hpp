@@ -17,6 +17,8 @@
 
 #include <map>
 #include <memory>
+#include <chrono>
+#include <functional>
 
 #include "biped_interfaces/msg/sole_poses.hpp"
 #include "biped_interfaces/msg/phase.hpp"
@@ -111,6 +113,12 @@ private:
 
   rclcpp::Time start_moving_time_;
   bool has_started_moving_;
+
+  // Constants
+  const float IGNORE_TWIST_VELOCITY_TIME = 4.0; // Ignore twist velocity for the first 4 seconds to allow the robot to stabilize
+
+  bool delay_completed_;
+  rclcpp::TimerBase::SharedPtr delay_timer_;
 
 };
 
