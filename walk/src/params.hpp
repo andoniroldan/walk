@@ -38,6 +38,12 @@ public:
   twist_change_limiter::Params twist_change_limiter_;
   twist_limiter::Params twist_limiter_;
 
+  double arm_base_position_left_;
+  double arm_base_position_right_;
+  double arm_swing_amplitude_;
+  double arm_step_size_;
+  double arm_min_twist_to_activate_;
+
 private:
   rclcpp::Node & node_;
   rclcpp::Logger logger = rclcpp::get_logger("walk::Params");

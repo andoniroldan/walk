@@ -19,6 +19,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nao_lola_sensor_msgs REQUIRED)
+find_package(nao_lola_command_msgs REQUIRED)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
@@ -32,7 +33,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   tf2
   tf2_geometry_msgs
   geometry_msgs
-  nao_lola_sensor_msgs)
+  nao_lola_sensor_msgs
+  nao_lola_command_msgs)
 
 # Build
 add_library(${PROJECT_NAME}_node SHARED

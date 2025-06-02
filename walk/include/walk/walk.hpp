@@ -34,6 +34,9 @@
 #include "walk_interfaces/msg/gait.hpp"
 #include "walk_interfaces/msg/step.hpp"
 #include "nao_lola_sensor_msgs/msg/fsr.hpp"
+#include "nao_lola_command_msgs/msg/joint_positions.hpp"
+#include "nao_lola_command_msgs/msg/joint_stiffnesses.hpp"
+
 
 namespace walk {class Params;}
 class Step;
@@ -69,6 +72,8 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_current_twist_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_ready_to_step_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_getup_action_;
+  rclcpp::Publisher<nao_lola_command_msgs::msg::JointPositions>::SharedPtr pub_arm_positions_;
+  rclcpp::Publisher<nao_lola_command_msgs::msg::JointStiffnesses>::SharedPtr pub_general_stiffness_;
 
   // Debug publishers
   rclcpp::Publisher<walk_interfaces::msg::Gait>::SharedPtr pub_gait_;
@@ -85,6 +90,8 @@ private:
   void sendGetupCommand();
   void restartWalk();
   void fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg);
+  void updateArms();
+  double stepTowards(double current, double target, double step);
 
   // Parameters
   std::unique_ptr<Params> params_;
@@ -119,6 +126,12 @@ private:
 
   bool delay_completed_;
   rclcpp::TimerBase::SharedPtr delay_timer_;
+
+  float current_left_shoulder_pos_;
+  float current_right_shoulder_pos_;
+
+  double target_left_shoulder_pos_;
+  double target_right_shoulder_pos_;
 
 };
 

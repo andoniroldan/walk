@@ -23,22 +23,29 @@ using rclcpp::ParameterValue;
 Params::Params(rclcpp::Node & node)
 : node_{node}
 {
-  double max_forward = node_.declare_parameter("max_forward", 0.3);  // max forward velocity (m/s)
-  double max_left = node_.declare_parameter("max_left", 0.2);  // max side velocity (m/s)
-  double max_turn = node_.declare_parameter("max_turn", 2.0);  // max turn velocity (rad/s)
-  double speed_multiplier = node_.declare_parameter("speed_multiplier", 1.0);  // how much to multiple speed by (0.0 - 1.0)  // NOLINT
-  double foot_lift_amp = node_.declare_parameter("foot_lift_amp", 0.012);  // how much to raise foot when it is highest (m)  // NOLINT
-  double period = node_.declare_parameter("period", 0.25);  // time taken for one step, (s)
-  double dt = node_.declare_parameter("dt", 0.01);  // time taken between each generateCommand call (s)  // NOLINT
-  double sole_x = node_.declare_parameter("sole_x", -0.022);  // x coordinate of sole from hip when standing (m)  // NOLINT
-  double sole_y = node_.declare_parameter("sole_y", 0.05);  // y coordinate of sole from hip when standing (m)  // NOLINT
-  double sole_z = node_.declare_parameter("sole_z", -0.315);  // z coordinate of sole from hip when standing (m)  // NOLINT
-  double max_forward_change = node_.declare_parameter("max_forward_change", 0.06);  // how much forward can change in one step (m/s)  // NOLINT
-  double max_left_change = node_.declare_parameter("max_left_change", 0.1);  // how much left can change in one step (m/s)  // NOLINT
-  double max_turn_change = node_.declare_parameter("max_turn_change", 1.0);  // how much turn can change in one step (rad/s)  // NOLINT
-  double footh_forward_multiplier = node_.declare_parameter("footh_forward_multiplier", 0.1);  // how much extra height to add to the swing foot, as a multiplier of the magnitude of the step in the forward/backward direction.  // NOLINT
-  double footh_left_multiplier = node_.declare_parameter("footh_left_multiplier", 0.3);  // how much extra height to add to the swing foot, as a multiplier of the magnitude of the step in the left/right direction.  // NOLINT
+  double max_forward = node_.declare_parameter("max_forward", 0.1);
+  double max_left = node_.declare_parameter("max_left", 0.05);
+  double max_turn = node_.declare_parameter("max_turn", 0.5);
+  double speed_multiplier = node_.declare_parameter("speed_multiplier", 0.8);
+  double foot_lift_amp = node_.declare_parameter("foot_lift_amp", 0.002);
+  double period = node_.declare_parameter("period", 0.3);
+  double dt = node_.declare_parameter("dt", 0.01);
+  double sole_x = node_.declare_parameter("sole_x", -0.022);
+  double sole_y = node_.declare_parameter("sole_y", 0.05);
+  double sole_z = node_.declare_parameter("sole_z", -0.315);
+  double max_forward_change = node_.declare_parameter("max_forward_change", 0.04);
+  double max_left_change = node_.declare_parameter("max_left_change", 0.04);
+  double max_turn_change = node_.declare_parameter("max_turn_change", 0.6);
+  double footh_forward_multiplier = node_.declare_parameter("footh_forward_multiplier", 0.1);
+  double footh_left_multiplier = node_.declare_parameter("footh_left_multiplier", 0.15);
 
+  double arm_base_position_left = node_.declare_parameter("arm_base_position_left", 1.7);
+  double arm_base_position_right = node_.declare_parameter("arm_base_position_right", 1.7);
+  double arm_swing_amplitude = node_.declare_parameter("arm_swing_amplitude", 0.1);
+  double arm_step_size = node_.declare_parameter("arm_step_size", 0.015);
+  double arm_min_twist_to_activate = node_.declare_parameter("arm_min_twist_to_activate", 0.05);
+
+  
   RCLCPP_DEBUG(logger, "Parameters: ");
   RCLCPP_DEBUG(logger, "  max_forward : %f", max_forward);
   RCLCPP_DEBUG(logger, "  max_left : %f", max_left);
@@ -55,6 +62,11 @@ Params::Params(rclcpp::Node & node)
   RCLCPP_DEBUG(logger, "  max_turn_change : %f", max_turn_change);
   RCLCPP_DEBUG(logger, "  footh_forward_multiplier : %f", footh_forward_multiplier);
   RCLCPP_DEBUG(logger, "  footh_left_multiplier : %f", footh_left_multiplier);
+  RCLCPP_DEBUG(logger, "  arm_base_position_left : %f", arm_base_position_left_);
+  RCLCPP_DEBUG(logger, "  arm_base_position_right : %f", arm_base_position_right_);
+  RCLCPP_DEBUG(logger, "  arm_swing_amplitude : %f", arm_swing_amplitude_);
+  RCLCPP_DEBUG(logger, "  arm_step_size : %f", arm_step_size_);
+  RCLCPP_DEBUG(logger, "  arm_min_twist_to_activate : %f", arm_min_twist_to_activate_);
 
   feet_trajectory_ = feet_trajectory::Params(
     foot_lift_amp, period, dt, footh_forward_multiplier, footh_left_multiplier);
@@ -64,6 +76,13 @@ Params::Params(rclcpp::Node & node)
     max_forward_change, max_left_change, max_turn_change);
   twist_limiter_ = twist_limiter::Params(
     max_forward, max_left, max_turn, speed_multiplier);
+
+  arm_base_position_left_ = arm_base_position_left;
+  arm_base_position_right_ = arm_base_position_right;
+  arm_swing_amplitude_ = arm_swing_amplitude;
+  arm_step_size_ = arm_step_size;
+  arm_min_twist_to_activate_ = arm_min_twist_to_activate;
+
 
   // Register parameter change callback
   on_set_parameters_callback_handle_ = node_.add_on_set_parameters_callback(
@@ -114,7 +133,18 @@ rcl_interfaces::msg::SetParametersResult Params::parametersCallback(
       feet_trajectory_.footh_forward_multiplier_ = param.as_double();
     } else if (name == "footh_left_multiplier") {
       feet_trajectory_.footh_left_multiplier_ = param.as_double();
+    } else if (name == "arm_base_position_left") {
+      arm_base_position_left_ = param.as_double();
+    } else if (name == "arm_base_position_right") {
+      arm_base_position_right_ = param.as_double();
+    } else if (name == "arm_swing_amplitude") {
+      arm_swing_amplitude_ = param.as_double();
+    } else if (name == "arm_step_size") {
+      arm_step_size_ = param.as_double();
+    } else if (name == "arm_min_twist_to_activate") {
+      arm_min_twist_to_activate_ = param.as_double();
     }
+    
   }
 
   return result;

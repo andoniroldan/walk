@@ -25,6 +25,7 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nao_lola_sensor_msgs</depend>
+  <depend>nao_lola_command_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

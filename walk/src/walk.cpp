@@ -1,6 +1,7 @@
 #include <memory>
 #include <utility>
 #include "rclcpp/rclcpp.hpp"
+#include <cmath>
 
 
 #include "walk/walk.hpp"
@@ -58,6 +59,12 @@ Walk::Walk(const rclcpp::NodeOptions & options)
 
   pub_getup_action_ = create_publisher<std_msgs::msg::String>("action_req_legs", 10);
 
+  pub_arm_positions_ = create_publisher<nao_lola_command_msgs::msg::JointPositions>(
+    "/effectors/joint_positions", 10);
+
+  pub_general_stiffness_ = create_publisher<nao_lola_command_msgs::msg::JointStiffnesses>(
+    "/effectors/joint_stiffnesses", 10);
+  
   security_fall_ = false;
   RCLCPP_INFO(get_logger(), "Walk node has been started.");
 
@@ -72,6 +79,12 @@ Walk::Walk(const rclcpp::NodeOptions & options)
   last_fsr_emergency_stop_ = false;
 
   accel_x = 0.0;
+
+  current_left_shoulder_pos_ = 1.5;
+  current_right_shoulder_pos_ = 1.5;
+
+  target_left_shoulder_pos_ = 1.5;
+  target_right_shoulder_pos_ = 1.5;
 
   delay_completed_ = false;
 
@@ -137,6 +150,8 @@ void Walk::generateCommand()
       sole_pose::generate(params_->sole_pose_, step_state_->next(), phase_, filtered_gyro_y_));
   }
 
+  updateArms();
+
   pub_current_twist_->publish(curr_twist_);
 
   std_msgs::msg::Bool ready_to_step;
@@ -146,6 +161,10 @@ void Walk::generateCommand()
 
 void Walk::walk(const geometry_msgs::msg::Twist & commanded_twist)
 {
+
+    RCLCPP_DEBUG(get_logger(), "arm_min_twist_to_activate_: %.3f", params_->arm_min_twist_to_activate_);
+
+
   if(!delay_completed_){
     return;
   }
@@ -244,6 +263,29 @@ void Walk::notifyPhase(const biped_interfaces::msg::Phase & phase)
       params_->feet_trajectory_, phase, ftp_current_, ftp_next));
   step_state_ = std::make_unique<StepState>(*step_);
   pub_step_->publish(*step_);
+
+
+  // print param arm_min_twist_to_activate_
+  RCLCPP_INFO(get_logger(), "arm_min_twist_to_activate_: %.3f", params_->arm_min_twist_to_activate_);
+
+  if (curr_twist_.linear.x > params_->arm_min_twist_to_activate_) {
+
+    RCLCPP_INFO(get_logger(), "Activating arms 💪");
+    double amplitude = params_->arm_swing_amplitude_;
+    double base_position_left = params_->arm_base_position_left_;
+    double base_position_right = params_->arm_base_position_right_;
+
+    if (phase.phase == biped_interfaces::msg::Phase::RIGHT_SWING) {
+      target_left_shoulder_pos_ = base_position_left - amplitude;   // left arm forward
+      target_right_shoulder_pos_ = base_position_right + amplitude;  // right arm backward
+    } else if (phase.phase == biped_interfaces::msg::Phase::LEFT_SWING) {
+      target_left_shoulder_pos_ = base_position_left + amplitude;   // left arm backward
+      target_right_shoulder_pos_ = base_position_right - amplitude;  // right arm forward
+    }
+  } else {
+    target_left_shoulder_pos_ = params_->arm_base_position_left_;;  // arms down
+    target_right_shoulder_pos_ = params_->arm_base_position_right_;;
+  }
 
   ftp_current_ = std::move(ftp_next);
 }
@@ -391,6 +433,19 @@ void Walk::actionStatusCallback(const std_msgs::msg::String::SharedPtr msg)
         walking_enabled_ = true;
         has_started_moving_ = false;
 
+        // Publis stifness to 1 in all joints
+        nao_lola_command_msgs::msg::JointStiffnesses msg_stiffness;
+        msg_stiffness.indexes = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                                  12, 13, 14, 15, 16, 17, 18};
+        msg_stiffness.stiffnesses = {1.0, 1.0, 1.0, 1.0, 1.0,
+                                      1.0, 1.0, 1.0, 1.0, 1.0,
+                                      1.0, 1.0, 1.0, 1.0, 1.0,
+                                      1.0, 1.0, 1.0, 1.0};
+
+        pub_general_stiffness_->publish(msg_stiffness);
+
+
+
       } else{
         RCLCPP_INFO(get_logger(), "✅ Recovery complete, walking is disabled.");
       }
@@ -466,6 +521,28 @@ void Walk::fsrCallback(const nao_lola_sensor_msgs::msg::FSR::SharedPtr msg)
     fsr_emergency_stop_ = false;
   }
 }
+
+void Walk::updateArms()
+{
+  double step_size = params_->arm_step_size_;
+  current_left_shoulder_pos_ = stepTowards(current_left_shoulder_pos_, target_left_shoulder_pos_, step_size);
+  current_right_shoulder_pos_ = stepTowards(current_right_shoulder_pos_, target_right_shoulder_pos_, step_size);
+
+  nao_lola_command_msgs::msg::JointPositions msg;
+  msg.indexes = {2, 18, 3, 19, 4, 5, 6, 20, 21, 22};
+  msg.positions = {current_left_shoulder_pos_, current_right_shoulder_pos_, 0.2, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+  pub_arm_positions_->publish(msg);
+}
+
+double Walk::stepTowards(double current, double target, double step)
+{
+  if (std::fabs(target - current) < step) {
+    return target;
+  }
+  return current + (target > current ? step : -step);
+}
+
 
 }  // namespace walk
 
