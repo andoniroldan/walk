@@ -88,6 +88,9 @@ Walk::Walk(const rclcpp::NodeOptions & options)
 
   delay_completed_ = false;
 
+  // No phase yet: the first phase received must count as a change (see restartWalk)
+  phase_.phase = biped_interfaces::msg::Phase::DOUBLE_STANCE;
+
   // Start a timer for the 20-second delay so the robot can start
   delay_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(20000), [this]() {
@@ -475,8 +478,13 @@ void Walk::restartWalk()
 {
   RCLCPP_WARN(get_logger(), "🔄 Resetting Walk node to initial state...");
 
-  // Reset phase and trajectory
+  // Reset phase and trajectory. A step is only calculated when the phase changes
+  // (notifyPhase), and the phase provider reports LEFT_STANCE (0) or RIGHT_STANCE (1) from
+  // the foot sensors, also while standing still. A default Phase() is LEFT_STANCE: standing
+  // with more weight on the left foot, the walk never took its first step again after a stop.
+  // DOUBLE_STANCE is never reported, so the first phase received always counts as a change.
   phase_ = biped_interfaces::msg::Phase();
+  phase_.phase = biped_interfaces::msg::Phase::DOUBLE_STANCE;
   curr_twist_ = geometry_msgs::msg::Twist();
   target_twist_ = geometry_msgs::msg::Twist();
   
